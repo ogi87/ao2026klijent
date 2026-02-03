@@ -14,6 +14,7 @@ import java.time.LocalDate;
 import java.util.*;
 import rs.ao2026.shared.Korisnik;
 import rs.ao2026.shared.Prijava;
+import rs.ao2026.shared.Validator;
 
 public class Klijent {
     private static ObjectOutputStream out;
@@ -59,17 +60,23 @@ public class Klijent {
         System.out.print("Prezime: "); String pr = sc.nextLine();
         
         String jmbg;
-        while(true) {
-            System.out.print("JMBG (13 cifara): "); jmbg = sc.nextLine();
-            if(jmbg.matches("\\d{13}")) break;
-            System.out.println("Neispravan JMBG!");
+        while (true) {
+            System.out.print("JMBG (13 cifara): ");
+            jmbg = sc.nextLine();
+            if (Validator.isValidJMBG(jmbg)) {
+                break;
+            }
+            System.out.println("GRESKA: JMBG mora imati tacno 13 cifara!");
         }
 
         String email;
-        while(true) {
-            System.out.print("Email: "); email = sc.nextLine();
-            if(email.contains("@")) break;
-            System.out.println("Neispravan email!");
+        while (true) {
+            System.out.print("Email: ");
+            email = sc.nextLine();
+            if (Validator.isValidEmail(email)) {
+                break;
+            }
+            System.out.println("GRESKA: Neispravan format email adrese (npr. ime@primer.com)!");
         }
 
         out.writeObject(new Korisnik(u, p, i, pr, jmbg, email));
@@ -85,7 +92,7 @@ public class Klijent {
 
         String res = (String) in.readObject();
         if (res.equals("OK")) {
-            ulogovani = (Korisnik) in.readObject(); // Primi ceo objekat sa servera
+            ulogovani = (Korisnik) in.readObject();
             System.out.println("Dobrodošli, " + ulogovani.getIme() + "!");
         } else {
             System.out.println(res);
@@ -93,11 +100,8 @@ public class Klijent {
     }
 
     private static void novaPrijava() throws Exception {
-    out.writeObject("NOVA_PRIJAVA");
-    
     String ime, prez, jmbg, email;
-    
-    // Ako je korisnik ulogovan, koristimo NJEGOVE podatke, a ne fiksne stringove
+
     if (ulogovani != null) {
         ime = ulogovani.getIme();
         prez = ulogovani.getPrezime();
@@ -106,68 +110,183 @@ public class Klijent {
     } else {
         System.out.print("Ime: "); ime = sc.nextLine();
         System.out.print("Prezime: "); prez = sc.nextLine();
-        System.out.print("JMBG: "); jmbg = sc.nextLine();
-        System.out.print("Email: "); email = sc.nextLine();
+
+        // Validacija JMBG-a (mora biti 13 cifara)
+        while (true) {
+            System.out.print("JMBG (13 cifara): ");
+            jmbg = sc.nextLine();
+            if (jmbg.matches("\\d{13}")) {
+                break;
+            }
+            System.out.println("GRESKA: JMBG mora sadrzati tacno 13 cifara!");
+        }
+
+        // Validacija Email-a
+        while (true) {
+            System.out.print("Email: ");
+            email = sc.nextLine();
+            if (email.matches("^[\\w-\\.]+@([\\w-]+\\.)+[\\w-]{2,4}$")) {
+                break;
+            }
+            System.out.println("GRESKA: Neispravan format email adrese!");
+        }
     }
 
-    System.out.print("Datum (YYYY-MM-DD): ");
-    LocalDate datum = LocalDate.parse(sc.nextLine());
-    
-    // Provera datuma
-    if (datum.isBefore(LocalDate.now().plusDays(1)) || datum.isAfter(LocalDate.of(2026, 2, 1))) {
-        System.out.println("Datum mora biti od sutra do 01.02.2026!");
-        // Moramo poslati nesto serveru da ne bi on ostao da ceka objekat
-        // Ili jednostavno rukovati ovim pre slanja komande
-        return; 
-    }
+        // 2. Unos i validacija datuma
+        LocalDate datum = null;
+        while (datum == null) {
+            System.out.print("Datum volontiranja (YYYY-MM-DD): ");
+            try {
+                datum = LocalDate.parse(sc.nextLine());
+                if (datum.isBefore(LocalDate.now().plusDays(1)) || datum.isAfter(LocalDate.of(2026, 2, 5))) {
+                    System.out.println("GRESKA: Datum mora biti od sutra do 05.02.2026!");
+                    datum = null; // Resetujemo da bi petlja trazila ponovo
+                }
+            } catch (Exception e) {
+                System.out.println("GRESKA: Neispravan format datuma! Koristite YYYY-MM-DD.");
+            }
+        }
 
-    System.out.print("Smena (jutarnja/popodnevna/vecernja): "); String smena = sc.nextLine();
-    System.out.print("Pozicija (informacije/redar/mediji/vip): "); String poz = sc.nextLine();
+        // 3. Unos smene i pozicije
+        System.out.print("Smena (jutarnja/popodnevna/vecernja): "); 
+        String smena = sc.nextLine();
+        System.out.print("Pozicija (informacije/redar/mediji/vip): "); 
+        String poz = sc.nextLine();
 
-    Prijava nova = new Prijava(jmbg, email, ime, prez, datum, smena, poz);
-    out.writeObject(nova);
-    out.flush(); // DODATO: Osigurava da podaci odu odmah
+        // 4. Slanje komande i objekta serveru
+        out.writeObject("NOVA_PRIJAVA"); 
+        Prijava nova = new Prijava(jmbg, email, ime, prez, datum, smena, poz);
+        out.writeObject(nova);
+        out.flush(); 
 
-    Object odgovor = in.readObject();
-    System.out.println(odgovor.toString());
+        
+        Object odgovor = in.readObject();
+        System.out.println("SERVER: " + odgovor.toString());
 }
 
-    private static void pregledPrijava() throws Exception {
-        out.writeObject("PREGLED");
-        System.out.print("Unesite JMBG za proveru: ");
-        String jmbg = sc.nextLine();
-        out.writeObject(jmbg);
-        
-        List<Prijava> lista = (List<Prijava>) in.readObject();
-        if (lista.isEmpty()) System.out.println("Nema prijava.");
-        else lista.forEach(System.out::println);
-    }
+        private static void pregledPrijava() throws Exception {
+            out.writeObject("PREGLED");
 
-    private static void izmenaPrijave() throws Exception {
+            String jmbgZaSlanje;
+            String emailZaSlanje;
+
+            // Ako je korisnik ulogovan, automatski uzimamo podatke sa njegovog profila
+            if (ulogovani != null) {
+                jmbgZaSlanje = ulogovani.getJmbg();
+                emailZaSlanje = ulogovani.getEmail();
+                System.out.println("\n--- PREGLED VAŠIH PRIJAVA (Ulogovani ste kao: " + ulogovani.getUsername() + ") ---");
+            } else {
+                // Ako nije ulogovan (osnovni zahtev), onda mora da unese rucno
+                System.out.println("\n--- PREGLED PRIJAVA ---");
+                System.out.print("Unesite Vaš JMBG: ");
+                jmbgZaSlanje = sc.nextLine();
+                System.out.print("Unesite Vaš E-mail: ");
+                emailZaSlanje = sc.nextLine();
+            }
+
+            // saljemo parametre serveru
+            out.writeObject(jmbgZaSlanje);
+            out.writeObject(emailZaSlanje);
+            out.flush();
+
+            List<Prijava> lista = (List<Prijava>) in.readObject();
+
+            if (lista.isEmpty()) {
+                System.out.println("Nema pronađenih prijava.");
+            } else {
+                System.out.println("\nLista prijava:");
+                System.out.println("--------------------------------------------------------------------------------");
+                for (int i = 0; i < lista.size(); i++) {
+                    System.out.println(i + ". " + lista.get(i));
+                }
+                System.out.println("--------------------------------------------------------------------------------");
+            }
+        }
+
+        private static void izmenaPrijave() throws Exception {
+        String jmbg, email;
+
+        
+        if (ulogovani != null) {
+            jmbg = ulogovani.getJmbg();
+            email = ulogovani.getEmail();
+            System.out.println("\n--- IZMENA PRIJAVA (Ulogovani ste) ---");
+        } else {
+            System.out.println("\n--- IZMENA PRIJAVA ---");
+            System.out.print("Unesite JMBG: ");
+            jmbg = sc.nextLine();
+            System.out.print("Unesite Email: ");
+            email = sc.nextLine();
+        }
+
+        
         out.writeObject("PREGLED");
-        System.out.print("Unesite JMBG: ");
-        String jmbg = sc.nextLine();
         out.writeObject(jmbg);
+        out.writeObject(email);
+        out.flush();
+
         List<Prijava> lista = (List<Prijava>) in.readObject();
 
-        for (int i = 0; i < lista.size(); i++) System.out.println(i + ". " + lista.get(i));
+        if (lista.isEmpty()) {
+            System.out.println("Nema pronađenih prijava za date podatke.");
+            return;
+        }
+
         
+        for (int i = 0; i < lista.size(); i++) {
+            System.out.println(i + ". " + lista.get(i));
+        }
+
         System.out.print("Redni broj prijave za izmenu: ");
         int index = Integer.parseInt(sc.nextLine());
+
+        if (index < 0 || index >= lista.size()) {
+            System.out.println("Neispravan indeks!");
+            return;
+        }
+
+        Prijava stara = lista.get(index);
+
+     
+        LocalDate noviDatum = null;
+        while (noviDatum == null) {
+            System.out.print("Novi datum (YYYY-MM-DD) [Trenutno: " + stara.getDatumVolontiranja() + "]: ");
+            try {
+                noviDatum = LocalDate.parse(sc.nextLine());
+                if (noviDatum.isBefore(LocalDate.now().plusDays(1)) || noviDatum.isAfter(LocalDate.of(2026, 2, 5))) {
+                    System.out.println("GRESKA: Datum mora biti od sutra do 05.02.2026!");
+                    noviDatum = null;
+                }
+            } catch (Exception e) {
+                System.out.println("GRESKA: Neispravan format datuma!");
+            }
+        }
+
+        System.out.print("Nova smena [Trenutno: " + stara.getSmena() + "]: "); 
+        String novaSmena = sc.nextLine();
+        System.out.print("Nova pozicija [Trenutno: " + stara.getPozicija() + "]: "); 
+        String novaPozicija = sc.nextLine();
+
+        
+        Prijava nova = new Prijava(
+            stara.getJmbg(), 
+            stara.getEmail(), 
+            stara.getIme(), 
+            stara.getPrezime(), 
+            noviDatum, 
+            novaSmena, 
+            novaPozicija
+        );
+
         
         out.writeObject("IZMENA");
         out.writeObject(index);
-        
-        System.out.print("Novi datum (YYYY-MM-DD): ");
-        LocalDate d = LocalDate.parse(sc.nextLine());
-        System.out.print("Nova smena: "); String s = sc.nextLine();
-        System.out.print("Nova pozicija: "); String p = sc.nextLine();
-        
-        Prijava stara = lista.get(index);
-        Prijava nova = new Prijava(stara.getJmbg(), stara.getEmail(), "Ime", "Prez", d, s, p);
-        
         out.writeObject(nova);
-        out.writeObject(jmbg);
-        System.out.println((String) in.readObject());
+        out.writeObject(jmbg); 
+        out.flush();
+
+        
+        String odgovor = (String) in.readObject();
+        System.out.println("SERVER: " + odgovor);
     }
 }

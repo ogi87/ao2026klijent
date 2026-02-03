@@ -40,6 +40,23 @@ public class Prijava implements Serializable {
     public String getEmail() {
         return email;
     }
+
+    public String getPrezime() {
+        return prezime;
+    }
+
+    public void setPrezime(String prezime) {
+        this.prezime = prezime;
+    }
+
+    public LocalDateTime getDatumKreiranja() {
+        return datumKreiranja;
+    }
+
+    public void setDatumKreiranja(LocalDateTime datumKreiranja) {
+        this.datumKreiranja = datumKreiranja;
+    }
+    
     
     
     public LocalDate getDatumVolontiranja() { return datumVolontiranja; }
